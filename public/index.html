@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Path</title>
+	<meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+	<script src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.8.0.js"></script>
+</head>
+<body>
+	<form id="define" action="">
+		Height:<input id="height" type="number" name="height" min="0">
+		Width:<input id="width" type="number" name="width" min="0">
+		<input class="button" type="submit" value="OK">
+	</form>
+	<div>
+		<button class="button chose" id="1">选择障碍物</button>
+		<button class="button chose" id="2">选择起点</button>
+		<button class="button chose" id="3">选择终点</button>
+		<button class="button" id="calculate">开始计算路径</button>
+		<button class="button refresh" id="4">重置选择</button>
+	</div>
+
+	<div id="map">
+	<!-- 这里是map -->
+	</div>
+</body>
+
+<style type="text/css">
+	.button {
+		padding: 5px;
+		margin: 5px;
+		font-size: 1.0em;
+	}
+	.element {
+		width: 30px;
+		height: 30px;
+		padding: 0px;
+		margin: 0.5px;
+		text-align: center;
+		vertical-align: 
+		border-style: solid,button;
+	}
+	.element:hover {
+        /*background: #ffffff;*/
+        border: solid 2px;
+        opacity: 0.6;
+    }
+    .element-start {
+		background: #0c0;
+		border-color: #0c0;
+    }
+    .element-end {
+		background: #c00;
+		border-color: #c00;
+    }
+    .element-hinder {
+    	background: #111;
+    }
+    .element-path {
+    	background: #0f0;
+    }
+    .element-f {
+    	opacity: 0.7;
+    	border: solid 1.5px;
+    }
+    .chose-chosen {
+    	background: #888;
+    }
+    .refresh {
+    	background: #f00;
+    }
+    #calculate {
+    	background: #0f0;
+    }
+</style>
+
+<script type="text/javascript">
+	var status = "0"; //0无选择，1障碍物，2起点，3终点
+	var width = 0;
+	var height = 0;
+	var hinderList = new Array();
+	var start = "";
+	var end = "";
+	$(".element").live("click",function() {
+		switch (status) {
+			case "1":
+				if ($(this).hasClass("element-start") || $(this).hasClass("element-end")) {
+					break;
+				}
+				$(this).toggleClass("element-hinder");
+				if ($(this).hasClass("element-hinder")) {
+					hinderList.push($(this).attr("id"));
+				} else {
+					for (var i = 0; i < hinderList.length; i++) {
+					    if (hinderList[i] == $(this).attr("id")) {
+					        hinderList.splice(i, 1);
+					        break;
+				    	}
+				  	}
+				}
+				break;
+			case "2"://start
+				if ($(this).hasClass("element-hinder") || $(this).hasClass("element-end")) {
+					break;
+				}
+				if (start != "") {
+					$("#" + start).toggleClass("element-start");
+				} 
+				$(this).toggleClass("element-start");
+				start = $(this).attr("id");
+				break;
+			case "3"://end
+				if ($(this).hasClass("element-start") || $(this).hasClass("element-hinder")) {
+					break;
+				}
+				if (end != "") {
+					$("#" + end).toggleClass("element-end");
+				} 
+				$(this).toggleClass("element-end");
+				end = $(this).attr("id");
+				break;
+			default:
+				alert("请选择输入选项");
+		}
+	});
+
+	$(".chose").click(function() {
+		$("#" + status).removeClass("chose-chosen");
+		status = parseInt($(this).attr("id"));
+		$(this).addClass("chose-chosen");
+	});
+
+	//新建或者重置map
+	function resetMap() {
+		width = $("#width").val();
+		height = $("#height").val();
+		$("#map").html("");
+		for (var row = 0; row < height; row++) {
+			for (var col = 0; col < width; col++) {
+				var elementId =  row + '_' + col;
+				var elementName =  row * width + col;
+				$("#map").append("<button id='" + elementId + "' class='element'>" + elementName + "</button>");
+			}
+			$("#map").append("</br>");
+		}
+		//初始化map后，直接选择障碍
+		$("#1").addClass("chose-chosen");
+		$("#2").removeClass("chose-chosen");
+		$("#3").removeClass("chose-chosen");
+		status = "1";
+		start = "";
+		end = "";
+		hinderList.splice(0, hinderList.length);
+	}
+
+	$("#define").submit(function(e) {
+		e.preventDefault();
+		resetMap();
+	});
+
+	$("#4").click(function() {
+		resetMap();
+	});
+
+	$("#calculate").click(function() {
+		if (start == "") {
+			alert("请设置起点");
+			return;
+		}
+
+		if (end == "") {
+			alert("请设置终点");
+			return;
+		}
+		
+		$(".element").removeClass("element-path");
+		$(".element").removeClass("element-f");
+
+		var hinderListStr = JSON.stringify(hinderList);
+
+		var data = {
+			width : width,
+			height : height,
+			start : start,
+			end : end,
+			hinderList: hinderList
+		}
+
+		$.post('/calculate.php', JSON.stringify(data), function(rdata) {
+			if (rdata.path.length == 0) {
+				alert("没有路径");
+			} else {
+				for (var i = 1; i < rdata.path.length - 1; i++) {
+					$("#" + rdata.path[i]).addClass("element-path");
+				}
+
+				for (var i = 0; i < rdata.map.length; i++) {
+					for (var j = 0; j < rdata.map[i].length; j++) {
+						if (!$("#" + i + "_" + j).hasClass("element-path")
+							&& !$("#" + i + "_" + j).hasClass("element-end")) {
+							if (rdata.map[i][j] != null) {
+								$("#" + i + "_" + j).text(rdata.map[i][j]);
+								$("#" + i + "_" + j).addClass("element-f");
+							}
+						}
+					}
+				}
+			}
+		}, 'json');
+	});
+</script>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
